@@ -5,8 +5,8 @@ __version__ = '0.1'
 
 import sys
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.widgets import RectangleSelector
 import struct
 
 
@@ -22,7 +22,20 @@ class Axis():
         return "%s, %s" % (self.name, self.units)
 
     def __str__(self):
-        return "%s, %s from %u to %u" % (self.name, self.units, self.start, self.stop)
+        return "%s, %s from %u to %u with step %f" % (self.name, self.units, self.start, self.stop, self.step)
+
+
+def show():
+    plt.show()
+
+
+def get_pixel_coord(axis, pixel):
+    """
+    :param axis: This is actual axis parameter
+    :param pixel: This is pixel coordinate in data units
+    :return: Pixel coordinate in pixel units
+    """
+    return int((pixel - axis.start) / axis.step)
 
 
 class Spectrum2D():
@@ -39,9 +52,13 @@ class Spectrum2D():
 
         self._read_spectrum(file_name)
         self.lum = self.raw_lum.copy()
-        self.fig = None
+        self.fig1d = None
+        self.fig2d = None
         self.ax2d = None
         self.ax1d = None
+        self.image2d = None
+        self.colorbar = None
+        self.rec_select = None
 
     def _read_spectrum(self, file_name):
         self._raw_data = read_spe(file_name)
@@ -50,7 +67,7 @@ class Spectrum2D():
         self.calib_polynom = np.array([p[2], p[1], p[0]])
         self.wavelength = np.polyval(self.calib_polynom, xrange(1, 1 + len(self.raw_lum[0])))
         self.x_axis = Axis("Wavelength", "nm", self.wavelength[0], self.wavelength[-1])
-        self.x_axis.step = (self.x_axis.stop - self.y_axis.start) / (len(self.raw_lum[0]) - 1)
+        self.x_axis.step = (self.x_axis.stop - self.x_axis.start) / (len(self.raw_lum[0]) - 1)
         self.y_axis.step = (self.y_axis.stop - self.y_axis.start) / (len(self.raw_lum) - 1)
 
     @staticmethod
@@ -63,24 +80,61 @@ class Spectrum2D():
         return extent
 
     def plot(self, figsize=(10, 10)):
-        self.fig = plt.figure(num=1, figsize=figsize)
-        self.ax2d = self.fig.add_subplot(111)
+        self.fig2d = plt.figure(num=1, figsize=figsize)
+        self.ax2d = self.fig2d.add_subplot(111)
         extent = self._construct_extent(self.x_axis, self.y_axis)
-        self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest')
+        self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest')
         self.ax2d.set_xlabel(self.x_axis.full_name())
         self.ax2d.set_ylabel(self.y_axis.full_name())
+        self.colorbar = self.fig2d.colorbar(self.image2d)
+
+
+        def onselect(eclick, erelease):
+            """
+
+            eclick and erelease are matplotlib events at press and release
+
+            """
+            # TODO: Fix y coordinate
+            # print ' startposition : (%f, %f)' % (eclick.xdata, eclick.ydata)
+            print ' startposition : (%u, %u)' % (get_pixel_coord(self.x_axis, eclick.xdata),
+                                                 get_pixel_coord(self.y_axis, eclick.ydata))
+            print self.ax2d.images
+            # print ' endposition   : (%f, %f)' % (erelease.xdata, erelease.ydata)
+            # print ' used button   : ', eclick.button
+            # print ' endposition : (%u, %u)' % (get_pixel_coord(self.x_axis, erelease.xdata),
+            # get_pixel_coord(self.y_axis, erelease.ydata))
+
+            x = [0, 0]
+            x[0] = get_pixel_coord(self.x_axis, eclick.xdata)
+            x[1] = get_pixel_coord(self.x_axis, erelease.ydata)
+            x.sort()
+            y = [0, 0]
+            y[0] = get_pixel_coord(self.y_axis, eclick.ydata)
+            y[1] = get_pixel_coord(self.y_axis, erelease.ydata)
+            y.sort()
+
+            tmp = self.lum[x[0]: x[1], y[0]: y[1]]
+            print("Min: %u, max: %u" % (tmp.min(), tmp.max()))
+            print("All min: %u, max: %u" % (self.lum.min(), self.lum.max()))
+
+            self.image2d.norm.vmin = tmp.min()
+            self.image2d.norm.vmax = tmp.max()
+            self.image2d.changed()
+            # self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest', vmin=tmp.min(),
+            #                  vmax=tmp.max())
+            self.fig2d.canvas.draw()
+
+        self.rec_select = RectangleSelector(self.ax2d, onselect=onselect, drawtype='box', minspanx=5, minspany=5,
+                                            spancoords=u'pixels')
 
     def plot_slice(self, spec_num=0, figsize=(10, 10)):
         lum = self.lum[spec_num]
-        self.fig = plt.figure(num=2, figsize=figsize)
-        self.ax1d = self.fig.add_subplot(111)
+        self.fig1d = plt.figure(num=2, figsize=figsize)
+        self.ax1d = self.fig1d.add_subplot(111)
         self.ax1d.plot(self.wavelength, lum)
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
-
-    @staticmethod
-    def show():
-        plt.show()
 
 
 # from Kasey
@@ -189,7 +243,7 @@ def read_spe(spefilename, verbose=False):
     if accumulations == -1:
         # if > 32767, set to -1 and
         # see lavgexp below (668)
-        #accumulations = struct.unpack_from("l", header, offset=668)[0]
+        # accumulations = struct.unpack_from("l", header, offset=668)[0]
         # or should it be DWORD, NumExpAccums (1422): Number of Time experiment accumulated
         accumulations = struct.unpack_from("l", header, offset=1422)[0]
 
@@ -197,19 +251,19 @@ def read_spe(spefilename, verbose=False):
        like the center wavelength..."""
     xcalib = {}
 
-    #SHORT SpecAutoSpectroMode 70 T/F Spectrograph Used
+    # SHORT SpecAutoSpectroMode 70 T/F Spectrograph Used
     xcalib['SpecAutoSpectroMode'] = bool(struct.unpack_from("h", header, offset=70)[0])
 
-    #float SpecCenterWlNm # 72 Center Wavelength in Nm
+    # float SpecCenterWlNm # 72 Center Wavelength in Nm
     xcalib['SpecCenterWlNm'] = struct.unpack_from("f", header, offset=72)[0]
 
-    #SHORT SpecGlueFlag 76 T/F File is Glued
+    # SHORT SpecGlueFlag 76 T/F File is Glued
     xcalib['SpecGlueFlag'] = bool(struct.unpack_from("h", header, offset=76)[0])
 
-    #float SpecGlueStartWlNm 78 Starting Wavelength in Nm
+    # float SpecGlueStartWlNm 78 Starting Wavelength in Nm
     xcalib['SpecGlueStartWlNm'] = struct.unpack_from("f", header, offset=78)[0]
 
-    #float SpecGlueEndWlNm 82 Starting Wavelength in Nm
+    # float SpecGlueEndWlNm 82 Starting Wavelength in Nm
     xcalib['SpecGlueEndWlNm'] = struct.unpack_from("f", header, offset=82)[0]
 
     #float SpecGlueMinOvrlpNm 86 Minimum Overlap in Nm
@@ -749,146 +803,3 @@ def read_spe(spefilename, verbose=False):
     #
     ###############################################################################
     ###############################################################################
-
-
-    ###############################################################################
-    ###############################################################################
-    #######################################
-    #### Lightly tested routines below ####
-    #######################################
-    ###############################################################################
-    ###############################################################################
-
-
-    #def speDictToFitsMultiExt(spedict, outfile=None, clobber=False, verbose=False):
-    #  """ Given an SPE file containing multiple exposures, create
-    #      a single, multi-extension FITS file with one image per HDU """
-    #
-    #  # FITS output filename
-    #  if outfile == None:
-    #    fitsfileroot, junk = os.path.splitext(spedict['SPEFNAME'])
-    #    fitsFilename = fitsfileroot+".fits"
-    #  if verbose:
-    #    print "fitsFilename = ", fitsFilename
-    #
-    #  hdrDesc = getHeaderDescriptions()
-    #
-    #  # Start a new HDU with image data
-    #  imglist = []
-    #  if verbose:
-    #    print "writing frame: ",
-    #  for frameNumber in range( len(spedict['data']) ):
-    #    if verbose:
-    #      print frameNumber, " ",
-    #    if frameNumber == 0:
-    #      # Set up the primary image (the first frame)
-    #      # and header fields
-    #      hdu = pyfits.PrimaryHDU(spedict['data'][frameNumber])
-    #      for kk in hdrDesc.keys():
-    #        hdu.header.update(kk, spedict[kk], hdrDesc[kk])
-    #      imglist.append( hdu )
-    #    else:
-    #      imglist.append( pyfits.ImageHDU(spedict['data'][frameNumber]) )
-    #  if verbose:
-    #    print ""
-    #
-    #  hdulist = pyfits.HDUList(imglist)
-    #
-    #  hdulist.writeto(fitsFilename, clobber=clobber)
-    #
-    #  return fitsFilename
-
-    #def readHeaderCfg(cfgfile, verbose=False, comment='#'):
-    #  """ sample cfgfile is
-    #
-    #  # FITSHDRName  SPEHdrFmt offset %% description
-    #  IGAIN h 148 %% intensifier gain, 0-255
-    #
-    #  """
-    #
-    #  descSep = '%%'
-    #  hdrCfg = {}
-    #  cfile = open(cfgfile, 'r')
-    #  for line in cfile:
-    #    line = line.strip()
-    #    if line.startswith(comment):
-    #      continue
-    #
-    #    hdr, description = line.split(descSep)
-    #    description = description.strip()
-    #
-    #    hdrName, hdrFmt, offset = hdr.split()
-    #    offset = int(offset)
-    #
-    #    hdrCfg[hdrName] = {'offset':offset, 'fmt':hdrFmt, 'description':description}
-    #
-    #  return hdrCfg
-
-    #def makeHeaderDict(spefilename, configfile, verbose=False):
-    #  """ external config file dictates what SPE header info
-    #  makes it into FITS file
-    #  """
-    #
-    #  cfgDict = readHeaderCfg(configfile)
-    #  print cfgDict
-    #
-    #  # open SPE file as binary input
-    #  spe = open(spefilename, "rb")
-    #
-    #  # Header length is a fixed number
-    #  nBytesInHeader = 4100
-    #  # Read the entire header
-    #  header = spe.read(nBytesInHeader)
-    #
-    #  hdrDict = {}
-    #
-    #  for key in cfgDict.keys():
-    #    val = struct.unpack_from(cfgDict[key]['fmt'], header,
-    #                             offset=cfgDict[key]['offset'])[0]
-    #    hdrDict[key] = {'val':val, 'comment':cfgDict[key]['description']}
-    #
-    #  # then do the mandatory ones
-    #  mandatoryDict = {}
-    #  mandatoryDict['SPEDTYPE'] = {'offset':108, 'fmt':'h', 'description':'SPE file image data type'}
-    #  mandatoryDict['NX'] = {'offset':42, 'fmt':'H', 'description':'Number of x pixels'}
-    #  mandatoryDict['NY'] = {'offset':656, 'fmt':'H', 'description':'Number of y pixels'}
-    #  mandatoryDict['NFRAMES'] = {'offset':1446, 'fmt':'l', 'description':'Number of frames in original SPE file'}
-    #
-    #  if verbose:
-    #    print hdrDict
-    #  spe.close()
-
-    #def getDataType(header, offset=108):
-    #
-    #  data_type = struct.unpack_from("h", header, offset=offset)[0]
-    #
-    #  # Determine the data type format string for
-    #  # upcoming struct.unpack_from() calls
-    #  if data_type == 0:
-    #    # float (4 bytes)
-    #    dataTypeStr = "f"  #untested
-    #    bytesPerPixel = 4
-    #  elif data_type == 1:
-    #    # long (4 bytes)
-    #    dataTypeStr = "l"  #untested
-    #    bytesPerPixel = 4
-    #  elif data_type == 2:
-    #    # short (2 bytes)
-    #    dataTypeStr = "h"  #untested
-    #    bytesPerPixel = 2
-    #  elif data_type == 3:
-    #    # unsigned short (2 bytes)
-    #    dataTypeStr = "H"  # 16 bits in python on intel mac
-    #    bytesPerPixel = 2
-    #    dtype = "int32"  # for numpy.array().
-    #    # other options include:
-    #    # IntN, UintN, where N = 8,16,32 or 64
-    #    # and Float32, Float64, Complex64, Complex128
-    #    # but need to verify that pyfits._ImageBaseHDU.ImgCode cna handle it
-    #    # right now, ImgCode must be float32, float64, int16, int32, int64 or uint8
-    #  else:
-    #    print "unknown data type"
-    #    print "returning..."
-    #    return
-    #
-    #  return (dataTypeStr, bytesPerPixel, dtype)
