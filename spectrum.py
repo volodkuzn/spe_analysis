@@ -94,11 +94,10 @@ class Spectrum2D():
             eclick and erelease are matplotlib events at press and release
 
             """
-            # TODO: Fix y coordinate
             # print ' startposition : (%f, %f)' % (eclick.xdata, eclick.ydata)
-            print ' startposition : (%u, %u)' % (get_pixel_coord(self.x_axis, eclick.xdata),
-                                                 get_pixel_coord(self.y_axis, eclick.ydata))
-            print self.ax2d.images
+            # print ' startposition : (%u, %u)' % (get_pixel_coord(self.x_axis, eclick.xdata),
+            # get_pixel_coord(self.y_axis, eclick.ydata))
+            # print self.ax2d.images
             # print ' endposition   : (%f, %f)' % (erelease.xdata, erelease.ydata)
             # print ' used button   : ', eclick.button
             # print ' endposition : (%u, %u)' % (get_pixel_coord(self.x_axis, erelease.xdata),
@@ -106,16 +105,17 @@ class Spectrum2D():
 
             x = [0, 0]
             x[0] = get_pixel_coord(self.x_axis, eclick.xdata)
-            x[1] = get_pixel_coord(self.x_axis, erelease.ydata)
+            x[1] = get_pixel_coord(self.x_axis, erelease.xdata)
             x.sort()
             y = [0, 0]
             y[0] = get_pixel_coord(self.y_axis, eclick.ydata)
             y[1] = get_pixel_coord(self.y_axis, erelease.ydata)
             y.sort()
 
-            tmp = self.lum[x[0]: x[1], y[0]: y[1]]
-            print("Min: %u, max: %u" % (tmp.min(), tmp.max()))
-            print("All min: %u, max: %u" % (self.lum.min(), self.lum.max()))
+            tmp = self.lum[-y[1]: -y[0], x[0]: x[1]]
+            # print("Tmp slice: %u: %u, %u: %u" % (x[0], x[1], y[0], y[1]))
+            # print("Min: %u, max: %u" % (tmp.min(), tmp.max()))
+            # print("All min: %u, max: %u" % (self.lum.min(), self.lum.max()))
 
             self.image2d.norm.vmin = tmp.min()
             self.image2d.norm.vmax = tmp.max()
@@ -285,10 +285,10 @@ def read_spe(spefilename, verbose=False):
     xcalib['reserved1'] = struct.unpack_from("c", header, offset=3017)[0]
 
     # char string[40] # 3018 special string for scaling */
-    xcalib['string'] = struct.unpack_from("40c", header, offset=3018)
+    xcalib['string'] = struct.unpack_from("40s", header, offset=3018)
 
     # char reserved2[40] # 3058 reserved */
-    xcalib['reserved2'] = struct.unpack_from("40c", header, offset=3058)
+    xcalib['reserved2'] = struct.unpack_from("40s", header, offset=3058)
 
     # char calib_valid # 3098 flag if calibration is valid */
     xcalib['calib_valid'] = struct.unpack_from("c", header, offset=3098)[0]
@@ -326,10 +326,10 @@ def read_spe(spefilename, verbose=False):
     # xcalib['calib_value'] = struct.unpack_from("BYTE", header, offset=3320)[0] # how to do this?
 
     # char calib_label[81] # 3321 Calibration label (NULL term'd) */
-    xcalib['calib_label'] = struct.unpack_from("81c", header, offset=3321)
+    xcalib['calib_label'] = struct.unpack_from("81s", header, offset=3321)
 
     # char expansion[87] # 3402 Calibration Expansion area */
-    xcalib['expansion'] = struct.unpack_from("87c", header, offset=3402)
+    xcalib['expansion'] = struct.unpack_from("87s", header, offset=3402)
     # end of Kasey's addition
 
     if verbose:
@@ -410,7 +410,7 @@ def read_spe(spefilename, verbose=False):
                'ACCUMULATIONS': accumulations,
                'FLATFIELD': flat_field_applied,
                'BACKGROUND': background_applied
-    }
+               }
 
     # Now read in the image data
     # Loop over each image frame in the image
@@ -447,7 +447,7 @@ def read_spe(spefilename, verbose=False):
 
     ###############################################################################
     ###############################################################################
-    ####        Description of the header structure used to create piUtils      ###
+    #           Description of the header structure used to create piUtils      ###
     ###############################################################################
     ###############################################################################
     #
@@ -478,7 +478,7 @@ def read_spe(spefilename, verbose=False):
     # short   ControllerVersion              0  Hardware Version
     # short   LogicOutput                    2  Definition of Output BNC
     # WORD    AmpHiCapLowNoise               4  Amp Switching Mode
-    #  WORD    xDimDet                        6  Detector x dimension of chip.
+    # WORD    xDimDet                        6  Detector x dimension of chip.
     #  short   mode                           8  timing mode
     #  float   exp_sec                       10  alternitive exposure, in sec.
     #  short   VChipXdim                     14  Virtual Chip X dim
@@ -624,7 +624,7 @@ def read_spe(spefilename, verbose=False):
     #  short   NumROI                      1510  number of ROIs used. if 0 assume 1.
     #
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #                        ROI entries   (1512 - 1631)
     #
@@ -650,7 +650,7 @@ def read_spe(spefilename, verbose=False):
     #                                              ROI  9  =  1608
     #                                              ROI 10  =  1620
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #  char    FlatField[HDRNAMEMAX]       1632  Flat field file name.
     #  char    background[HDRNAMEMAX]      1752  background sub. file name.
@@ -659,7 +659,7 @@ def read_spe(spefilename, verbose=False):
     #  char    YT_Info[1000]               1996-2995  Reserved for YT information
     #  long    WinView_id                  2996  == 0x01234567L if file created by WinX
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #                        START OF X CALIBRATION STRUCTURE (3000 - 3488)
     #
@@ -685,7 +685,7 @@ def read_spe(spefilename, verbose=False):
     #  char    calib_label[81]             3321  Calibration label (NULL term'd)
     #  char    expansion[87]               3402  Calibration Expansion area
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #                        START OF Y CALIBRATION STRUCTURE (3489 - 3977)
     #
@@ -713,7 +713,7 @@ def read_spe(spefilename, verbose=False):
     #
     #                         END OF CALIBRATION STRUCTURES
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #  char    Istring[40]                 3978  special intensity scaling string
     #  char    Spare_6[25]                 4018
@@ -735,7 +735,7 @@ def read_spe(spefilename, verbose=False):
     #
     #                         END OF HEADER
     #
-    #-------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------
     #
     #                                      4100  Start of Data
     #
