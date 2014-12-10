@@ -88,7 +88,6 @@ class Spectrum2D():
         self.ax2d.set_ylabel(self.y_axis.full_name())
         self.colorbar = self.fig2d.colorbar(self.image2d)
 
-
         def onselect(eclick, erelease):
             """
 
@@ -122,7 +121,7 @@ class Spectrum2D():
             self.image2d.norm.vmax = tmp.max()
             self.image2d.changed()
             # self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest', vmin=tmp.min(),
-            #                  vmax=tmp.max())
+            # vmax=tmp.max())
             self.fig2d.canvas.draw()
 
         self.rec_select = RectangleSelector(self.ax2d, onselect=onselect, drawtype='box', minspanx=5, minspany=5,
@@ -139,6 +138,7 @@ class Spectrum2D():
 
 # from Kasey
 # http://people.seas.harvard.edu/~krussell/html-tutorial/_modules/winspec.html
+# noinspection PyPep8
 def read_spe(spefilename, verbose=False):
     """
     Read a binary PI SPE file into a python dictionary
@@ -155,7 +155,7 @@ def read_spe(spefilename, verbose=False):
             from the SPE file
             Content of the dictionary is:
             spedict = {'data':[],    # a list of 2D numpy arrays, one per image
-            'IGAIN':pimaxGain,
+            'IGAIN':pimax_gain,
             'EXPOSURE':exp_sec,
             'SPEFNAME':spefilename,
             'OBSDATE':date,
@@ -188,25 +188,25 @@ def read_spe(spefilename, verbose=False):
     spe = open(spefilename, "rb")
 
     # Header length is a fixed number
-    nBytesInHeader = 4100
+    n_bytes_in_header = 4100
 
     # Read the entire header
-    header = spe.read(nBytesInHeader)
+    header = spe.read(n_bytes_in_header)
 
     # version of WinView used
-    swversion = struct.unpack_from("16s", header, offset=688)[0]
+    sw_version = struct.unpack_from("16s", header, offset=688)[0]
 
     # version of header used
     # Eventually, need to adjust the header unpacking
-    # based on the headerVersion.
-    headerVersion = struct.unpack_from("f", header, offset=1992)[0]
+    # based on the header_version.
+    header_version = struct.unpack_from("f", header, offset=1992)[0]
 
     # which camera controller was used?
-    controllerVersion = struct.unpack_from("h", header, offset=0)[0]
+    controller_version = struct.unpack_from("h", header, offset=0)[0]
     if verbose:
-        print "swversion         = ", swversion
-        print "headerVersion     = ", headerVersion
-        print "controllerVersion = ", controllerVersion
+        print "sw_version         = ", sw_version
+        print "header_version     = ", header_version
+        print "controller_version = ", controller_version
 
     # Date of the observation
     # (format is DDMONYYYY  e.g. 27Jan2009)
@@ -216,7 +216,7 @@ def read_spe(spefilename, verbose=False):
     exp_sec = struct.unpack_from("f", header, offset=10)[0]
 
     # Intensifier gain
-    pimaxGain = struct.unpack_from("h", header, offset=148)[0]
+    pimax_gain = struct.unpack_from("h", header, offset=148)[0]
 
     # Not sure which "gain" this is
     gain = struct.unpack_from("H", header, offset=198)[0]
@@ -227,16 +227,16 @@ def read_spe(spefilename, verbose=False):
     comments = struct.unpack_from("400s", header, offset=200)[0]
 
     # CCD Chip Temperature (Degrees C)
-    detectorTemperature = struct.unpack_from("f", header, offset=36)[0]
+    detector_temperature = struct.unpack_from("f", header, offset=36)[0]
 
     # The following get read but are not used
     # (this part is only lightly tested...)
-    analogGain = struct.unpack_from("h", header, offset=4092)[0]
+    analog_gain = struct.unpack_from("h", header, offset=4092)[0]
     noscan = struct.unpack_from("h", header, offset=34)[0]
-    pimaxUsed = struct.unpack_from("h", header, offset=144)[0]
-    pimaxMode = struct.unpack_from("h", header, offset=146)[0]
+    pimax_used = struct.unpack_from("h", header, offset=144)[0]
+    # pimaxMode = struct.unpack_from("h", header, offset=146)[0]
 
-    ########### here's from Kasey
+    # here's from Kasey
     # int avgexp 2 number of accumulations per scan (why don't they call this "accumulations"?)
     # this isn't actually accumulations, so fix it...
     accumulations = struct.unpack_from("h", header, offset=668)[0]
@@ -249,135 +249,122 @@ def read_spe(spefilename, verbose=False):
 
     """Start of X Calibration Structure (although I added things to it that I thought were relevant,
        like the center wavelength..."""
-    xcalib = {}
+    xcalib = {'SpecAutoSpectroMode': bool(struct.unpack_from("h", header, offset=70)[0]),
+              'SpecCenterWlNm': struct.unpack_from("f", header, offset=72)[0],
+              'SpecGlueFlag': bool(struct.unpack_from("h", header, offset=76)[0]),
+              'SpecGlueStartWlNm': struct.unpack_from("f", header, offset=78)[0],
+              'SpecGlueEndWlNm': struct.unpack_from("f", header, offset=82)[0],
+              'SpecGlueMinOvrlpNm': struct.unpack_from("f", header, offset=86)[0],
+              'SpecGlueFinalResNm': struct.unpack_from("f", header, offset=90)[0],
+              'background_applied': struct.unpack_from("h", header, offset=150)[0]}
 
-    # SHORT SpecAutoSpectroMode 70 T/F Spectrograph Used
-    xcalib['SpecAutoSpectroMode'] = bool(struct.unpack_from("h", header, offset=70)[0])
+    # short   BackGrndApplied              150  1 if background subtraction done
+    background_applied = False
+    if xcalib['background_applied'] == 1:
+        background_applied = True
 
-    # float SpecCenterWlNm # 72 Center Wavelength in Nm
-    xcalib['SpecCenterWlNm'] = struct.unpack_from("f", header, offset=72)[0]
-
-    # SHORT SpecGlueFlag 76 T/F File is Glued
-    xcalib['SpecGlueFlag'] = bool(struct.unpack_from("h", header, offset=76)[0])
-
-    # float SpecGlueStartWlNm 78 Starting Wavelength in Nm
-    xcalib['SpecGlueStartWlNm'] = struct.unpack_from("f", header, offset=78)[0]
-
-    # float SpecGlueEndWlNm 82 Starting Wavelength in Nm
-    xcalib['SpecGlueEndWlNm'] = struct.unpack_from("f", header, offset=82)[0]
-
-    #float SpecGlueMinOvrlpNm 86 Minimum Overlap in Nm
-    xcalib['SpecGlueMinOvrlpNm'] = struct.unpack_from("f", header, offset=86)[0]
-
-    #float SpecGlueFinalResNm 90 Final Resolution in Nm
-    xcalib['SpecGlueFinalResNm'] = struct.unpack_from("f", header, offset=90)[0]
-
-    #  short   BackGrndApplied              150  1 if background subtraction done
-    xcalib['BackgroundApplied'] = struct.unpack_from("h", header, offset=150)[0]
-    BackgroundApplied = False
-    if xcalib['BackgroundApplied'] == 1: BackgroundApplied = True
-
-    #  float   SpecGrooves                  650  Spectrograph Grating Grooves
+    # float   SpecGrooves                  650  Spectrograph Grating Grooves
     xcalib['SpecGrooves'] = struct.unpack_from("f", header, offset=650)[0]
 
-    #  short   flatFieldApplied             706  1 if flat field was applied.
-    xcalib['flatFieldApplied'] = struct.unpack_from("h", header, offset=706)[0]
-    flatFieldApplied = False
-    if xcalib['flatFieldApplied'] == 1: flatFieldApplied = True
+    # short   flat_field_applied             706  1 if flat field was applied.
+    xcalib['flat_field_applied'] = struct.unpack_from("h", header, offset=706)[0]
+    flat_field_applied = False
+    if xcalib['flat_field_applied'] == 1:
+        flat_field_applied = True
 
-    #double offset # 3000 offset for absolute data scaling */
+    # double offset # 3000 offset for absolute data scaling */
     xcalib['offset'] = struct.unpack_from("d", header, offset=3000)[0]
 
-    #double factor # 3008 factor for absolute data scaling */
+    # double factor # 3008 factor for absolute data scaling */
     xcalib['factor'] = struct.unpack_from("d", header, offset=3008)[0]
 
-    #char current_unit # 3016 selected scaling unit */
+    # char current_unit # 3016 selected scaling unit */
     xcalib['current_unit'] = struct.unpack_from("c", header, offset=3016)[0]
 
-    #char reserved1 # 3017 reserved */
+    # char reserved1 # 3017 reserved */
     xcalib['reserved1'] = struct.unpack_from("c", header, offset=3017)[0]
 
-    #char string[40] # 3018 special string for scaling */
+    # char string[40] # 3018 special string for scaling */
     xcalib['string'] = struct.unpack_from("40c", header, offset=3018)
 
-    #char reserved2[40] # 3058 reserved */
+    # char reserved2[40] # 3058 reserved */
     xcalib['reserved2'] = struct.unpack_from("40c", header, offset=3058)
 
-    #char calib_valid # 3098 flag if calibration is valid */
+    # char calib_valid # 3098 flag if calibration is valid */
     xcalib['calib_valid'] = struct.unpack_from("c", header, offset=3098)[0]
 
-    #char input_unit # 3099 current input units for */
+    # char input_unit # 3099 current input units for */
     xcalib['input_unit'] = struct.unpack_from("c", header, offset=3099)[0]
     """/* "calib_value" */"""
 
-    #char polynom_unit # 3100 linear UNIT and used */
+    # char polynom_unit # 3100 linear UNIT and used */
     xcalib['polynom_unit'] = struct.unpack_from("c", header, offset=3100)[0]
     """/* in the "polynom_coeff" */"""
 
-    #char polynom_order # 3101 ORDER of calibration POLYNOM */
+    # char polynom_order # 3101 ORDER of calibration POLYNOM */
     xcalib['polynom_order'] = struct.unpack_from("c", header, offset=3101)[0]
 
-    #char calib_count # 3102 valid calibration data pairs */
+    # char calib_count # 3102 valid calibration data pairs */
     xcalib['calib_count'] = struct.unpack_from("c", header, offset=3102)[0]
 
-    #double pixel_position[10];/* 3103 pixel pos. of calibration data */
+    # double pixel_position[10];/* 3103 pixel pos. of calibration data */
     xcalib['pixel_position'] = struct.unpack_from("10d", header, offset=3103)
 
-    #double calib_value[10] # 3183 calibration VALUE at above pos */
+    # double calib_value[10] # 3183 calibration VALUE at above pos */
     xcalib['calib_value'] = struct.unpack_from("10d", header, offset=3183)
 
-    #double polynom_coeff[6] # 3263 polynom COEFFICIENTS */
+    # double polynom_coeff[6] # 3263 polynom COEFFICIENTS */
     xcalib['polynom_coeff'] = struct.unpack_from("6d", header, offset=3263)
 
-    #double laser_position # 3311 laser wavenumber for relativ WN */
+    # double laser_position # 3311 laser wavenumber for relativ WN */
     xcalib['laser_position'] = struct.unpack_from("d", header, offset=3311)[0]
 
-    #char reserved3 # 3319 reserved */
+    # char reserved3 # 3319 reserved */
     xcalib['reserved3'] = struct.unpack_from("c", header, offset=3319)[0]
 
-    #unsigned char new_calib_flag # 3320 If set to 200, valid label below */
-    #xcalib['calib_value'] = struct.unpack_from("BYTE", header, offset=3320)[0] # how to do this?
+    # unsigned char new_calib_flag # 3320 If set to 200, valid label below */
+    # xcalib['calib_value'] = struct.unpack_from("BYTE", header, offset=3320)[0] # how to do this?
 
-    #char calib_label[81] # 3321 Calibration label (NULL term'd) */
+    # char calib_label[81] # 3321 Calibration label (NULL term'd) */
     xcalib['calib_label'] = struct.unpack_from("81c", header, offset=3321)
 
-    #char expansion[87] # 3402 Calibration Expansion area */
+    # char expansion[87] # 3402 Calibration Expansion area */
     xcalib['expansion'] = struct.unpack_from("87c", header, offset=3402)
-    ########### end of Kasey's addition
+    # end of Kasey's addition
 
     if verbose:
         print "date      = [" + date + "]"
         print "exp_sec   = ", exp_sec
-        print "pimaxGain = ", pimaxGain
+        print "pimax_gain = ", pimax_gain
         print "gain (?)  = ", gain
         print "data_type = ", data_type
         print "comments  = [" + comments + "]"
-        print "analogGain = ", analogGain
+        print "analog_gain = ", analog_gain
         print "noscan = ", noscan
-        print "detectorTemperature [C] = ", detectorTemperature
-        print "pimaxUsed = ", pimaxUsed
+        print "detectorTemperature [C] = ", detector_temperature
+        print "pimax_used = ", pimax_used
 
     # Determine the data type format string for
     # upcoming struct.unpack_from() calls
     if data_type == 0:
         # float (4 bytes)
-        dataTypeStr = "f"  #untested
-        bytesPerPixel = 4
+        data_type_str = "f"  # untested
+        bytes_per_pixel = 4
         dtype = "float32"
     elif data_type == 1:
         # long (4 bytes)
-        dataTypeStr = "l"  #untested
-        bytesPerPixel = 4
+        data_type_str = "l"  # untested
+        bytes_per_pixel = 4
         dtype = "int32"
     elif data_type == 2:
         # short (2 bytes)
-        dataTypeStr = "h"  #untested
-        bytesPerPixel = 2
+        data_type_str = "h"  # untested
+        bytes_per_pixel = 2
         dtype = "int32"
     elif data_type == 3:
         # unsigned short (2 bytes)
-        dataTypeStr = "H"  # 16 bits in python on intel mac
-        bytesPerPixel = 2
+        data_type_str = "H"  # 16 bits in python on intel mac
+        bytes_per_pixel = 2
         dtype = "int32"  # for numpy.array().
         # other options include:
         # IntN, UintN, where N = 8,16,32 or 64
@@ -400,29 +387,29 @@ def read_spe(spefilename, verbose=False):
         print "nx, ny, nframes = ", nx, ", ", ny, ", ", nframes
 
     npixels = nx * ny
-    npixStr = str(npixels)
-    fmtStr = npixStr + dataTypeStr
+    npixstr = str(npixels)
+    fmt_str = npixstr + data_type_str
     if verbose:
-        print "fmtStr = ", fmtStr
+        print "fmt_str = ", fmt_str
 
     # How many bytes per image?
-    nbytesPerFrame = npixels * bytesPerPixel
+    n_bytes_per_frame = npixels * bytes_per_pixel
     if verbose:
-        print "nbytesPerFrame = ", nbytesPerFrame
+        print "n_bytes_per_frame = ", n_bytes_per_frame
 
     # Create a dictionary that holds some header information
     # and contains a placeholder for the image data
     spedict = {'data': [],  # can have more than one image frame per SPE file
-               'IGAIN': pimaxGain,
+               'IGAIN': pimax_gain,
                'EXPOSURE': exp_sec,
                'SPEFNAME': spefilename,
                'OBSDATE': date,
-               'CHIPTEMP': detectorTemperature,
+               'CHIPTEMP': detector_temperature,
                'COMMENTS': comments,
                'XCALIB': xcalib,
                'ACCUMULATIONS': accumulations,
-               'FLATFIELD': flatFieldApplied,
-               'BACKGROUND': BackgroundApplied
+               'FLATFIELD': flat_field_applied,
+               'BACKGROUND': background_applied
     }
 
     # Now read in the image data
@@ -430,8 +417,7 @@ def read_spe(spefilename, verbose=False):
     if verbose:
         print "Reading image frames number ",
     for ii in range(nframes):
-        iistr = str(ii)
-        data = spe.read(nbytesPerFrame)
+        data = spe.read(n_bytes_per_frame)
         if verbose:
             print ii, " ",
 
@@ -439,25 +425,25 @@ def read_spe(spefilename, verbose=False):
         # standard python datatype size (4bytes for 'l') rather than native
         # (which on 64bit is 8bytes for 'l', for example).
         # See http://docs.python.org/library/struct.html
-        dataArr = np.array(struct.unpack_from("=" + fmtStr, data, offset=0),
-                           dtype=dtype)
+        data_arr = np.array(struct.unpack_from("=" + fmt_str, data, offset=0),
+                            dtype=dtype)
 
         # Resize array to nx by ny pixels
         # notice order... (y,x)
-        dataArr.resize((ny, nx))
-        #print dataArr.shape
+        data_arr.resize((ny, nx))
+        # print data_arr.shape
 
         # Push this image frame data onto the end of the list of images
         # but first cast the datatype to float (if it's not already)
         # this isn't necessary, but shouldn't hurt and could save me
         # from doing integer math when i really meant floating-point...
-        spedict['data'].append(dataArr.astype(float))
+        # noinspection PyTypeChecker
+        spedict['data'].append(data_arr.astype(float))
 
     if verbose:
         print ""
 
     return spedict
-
 
     ###############################################################################
     ###############################################################################
@@ -465,33 +451,33 @@ def read_spe(spefilename, verbose=False):
     ###############################################################################
     ###############################################################################
     #
-    #                                  WINHEAD.TXT
+    # WINHEAD.TXT
     #
-    #                            $Date: 3/23/04 11:36 $
+    # $Date: 3/23/04 11:36 $
     #
-    #                Header Structure For WinView/WinSpec (WINX) Files
+    # Header Structure For WinView/WinSpec (WINX) Files
     #
-    #  The current data file used for WINX files consists of a 4100 (1004 Hex)
-    #  byte header followed by the data.
+    # The current data file used for WINX files consists of a 4100 (1004 Hex)
+    # byte header followed by the data.
     #
-    #  Beginning with Version 2.5, many more items were added to the header to
-    #  make it a complete as possible record of the data collection.  This includes
-    #  spectrograph and pulser information.  Much of these additions were accomplished
-    #  by recycling old information which had not been used in many versions.
-    #  All data files created under previous 2.x versions of WinView/WinSpec CAN
-    #  still be read correctly.  HOWEVER, files created under the new versions
-    #  (2.5 and higher) CANNOT be read by previous versions of WinView/WinSpec
-    #  OR by the CSMA software package.
+    # Beginning with Version 2.5, many more items were added to the header to
+    # make it a complete as possible record of the data collection.  This includes
+    # spectrograph and pulser information.  Much of these additions were accomplished
+    # by recycling old information which had not been used in many versions.
+    # All data files created under previous 2.x versions of WinView/WinSpec CAN
+    # still be read correctly.  HOWEVER, files created under the new versions
+    # (2.5 and higher) CANNOT be read by previous versions of WinView/WinSpec
+    # OR by the CSMA software package.
     #
     #
-    #            ***************************************************
+    # ***************************************************
     #
-    #                                    Decimal Byte
-    #                                       Offset
-    #                                    -----------
-    #  short   ControllerVersion              0  Hardware Version
-    #  short   LogicOutput                    2  Definition of Output BNC
-    #  WORD    AmpHiCapLowNoise               4  Amp Switching Mode
+    # Decimal Byte
+    # Offset
+    # -----------
+    # short   ControllerVersion              0  Hardware Version
+    # short   LogicOutput                    2  Definition of Output BNC
+    # WORD    AmpHiCapLowNoise               4  Amp Switching Mode
     #  WORD    xDimDet                        6  Detector x dimension of chip.
     #  short   mode                           8  timing mode
     #  float   exp_sec                       10  alternitive exposure, in sec.
@@ -599,7 +585,7 @@ def read_spe(spefilename, verbose=False):
     #                                            10 = ST116 (GPIB)
     #                                            11 = OMA3 (GPIB)
     #                                            12 = OMA4
-    #  short   flatFieldApplied             706  1 if flat field was applied.
+    # short   flat_field_applied             706  1 if flat field was applied.
     #  char    Spare_3[16]                  708
     #  short   kin_trig_mode                724  Kinetics Trigger Mode
     #  char    dlabel[LABELMAX]             726  Data label.
