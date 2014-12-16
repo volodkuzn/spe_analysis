@@ -21,6 +21,9 @@ class Axis():
     def full_name(self):
         return "%s, %s" % (self.name, self.units)
 
+    def get_val(self, pixel):
+        return self.start + self.step * pixel
+
     def __str__(self):
         return "%s, %s from %u to %u with step %f" % (self.name, self.units, self.start, self.stop, self.step)
 
@@ -59,6 +62,7 @@ class Spectrum2D():
         self.image2d = None
         self.colorbar = None
         self.rec_select = None
+        self.spec_num = 0
 
     def _read_spectrum(self, file_name):
         self._raw_data = read_spe(file_name)
@@ -128,12 +132,31 @@ class Spectrum2D():
                                             spancoords=u'pixels')
 
     def plot_slice(self, spec_num=0, figsize=(10, 10)):
-        lum = self.lum[spec_num]
+        self.spec_num = spec_num
         self.fig1d = plt.figure(num=2, figsize=figsize)
         self.ax1d = self.fig1d.add_subplot(111)
-        self.ax1d.plot(self.wavelength, lum)
+        self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
+                       label="%.1f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
+        self.ax1d.legend()
+
+        def on_press(event):
+            # print("You pressed '%s' in '%s'" % (event.key, event.inaxes))
+            if event.key == 'up':
+                self.spec_num += 1
+            elif event.key == 'down':
+                self.spec_num -= 1
+            else:
+                return
+            self.spec_num %= len(self.lum)
+            self.ax1d.clear()
+            self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
+                           label="%.1f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
+            self.ax1d.legend()
+            self.fig1d.canvas.draw()
+
+        self.fig1d.canvas.mpl_connect('key_press_event', on_press)
 
 
 # from Kasey
