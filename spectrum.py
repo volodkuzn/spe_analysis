@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 import struct
+import matplotlib.colorbar
 
 
 class Axis():
@@ -70,7 +71,7 @@ class Spectrum2D():
         p = self._raw_data['XCALIB']["polynom_coeff"]
         self.calib_polynom = np.array([p[2], p[1], p[0]])
         self.wavelength = np.polyval(self.calib_polynom, xrange(1, 1 + len(self.raw_lum[0])))
-        self.x_axis = Axis("Wavelength", "nm", self.wavelength[0], self.wavelength[-1])
+        self.x_axis = Axis("Wavelength", "A", self.wavelength[0], self.wavelength[-1])
         self.x_axis.step = (self.x_axis.stop - self.x_axis.start) / (len(self.raw_lum[0]) - 1)
         self.y_axis.step = (self.y_axis.stop - self.y_axis.start) / (len(self.raw_lum) - 1)
 
@@ -83,14 +84,25 @@ class Spectrum2D():
         extent.append(y_axis.stop + y_axis.step / 2)
         return extent
 
-    def plot(self, figsize=(10, 10)):
+    def _prepare_axis_2d(self, figsize=(10, 10)):
+        """
+
+        :param figsize:
+        This methon prepares 2 figures and 2 axes for plotting
+        """
+        del self.ax2d
+        del self.fig2d
         self.fig2d = plt.figure(num=1, figsize=figsize)
         self.ax2d = self.fig2d.add_subplot(111)
+
+    def _plot_2d(self):
         extent = self._construct_extent(self.x_axis, self.y_axis)
         self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest')
         self.ax2d.set_xlabel(self.x_axis.full_name())
         self.ax2d.set_ylabel(self.y_axis.full_name())
-        self.colorbar = self.fig2d.colorbar(self.image2d)
+        cax, kw = matplotlib.colorbar.make_axes(self.ax2d, location='right', fraction=0.1, shrink=1.0)
+        matplotlib.colorbar.colorbar_factory(cax, self.image2d)
+        # self.colorbar = self.fig2d.colorbar(self.image2d)
 
         def onselect(eclick, erelease):
             """
@@ -131,12 +143,20 @@ class Spectrum2D():
         self.rec_select = RectangleSelector(self.ax2d, onselect=onselect, drawtype='box', minspanx=5, minspany=5,
                                             spancoords=u'pixels')
 
-    def plot_slice(self, spec_num=0, figsize=(10, 10)):
-        self.spec_num = spec_num
+    def plot_2d(self, figsize=(10, 10)):
+        self._prepare_axis_2d(figsize)
+        self._plot_2d()
+
+    def _prepare_axis_slice(self, figsize=(10, 10)):
+        del self.ax1d
+        del self.fig1d
         self.fig1d = plt.figure(num=2, figsize=figsize)
         self.ax1d = self.fig1d.add_subplot(111)
-        self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
-                       label="%.1f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
+
+    def _plot_slice(self, spec_num=0):
+        self.spec_num = spec_num
+        self.ax1d.plot(self.wavelength, self.lum[self.spec_num], color='green',
+                       label="%.3f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
         self.ax1d.legend()
@@ -152,11 +172,24 @@ class Spectrum2D():
             self.spec_num %= len(self.lum)
             self.ax1d.clear()
             self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
-                           label="%.1f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
+                           label="%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
             self.ax1d.legend()
             self.fig1d.canvas.draw()
 
         self.fig1d.canvas.mpl_connect('key_press_event', on_press)
+
+    def plot_slice(self, spec_num=0, figsize=(10, 10)):
+        self._prepare_axis_slice(figsize)
+        self._plot_slice(spec_num)
+
+    def plot_all(self, figsize=(15, 10)):
+        self.fig2d = plt.figure(figsize=figsize)
+        self.fig1d = self.fig2d
+        self.ax2d = self.fig2d.add_subplot(121)
+        self.ax1d = self.fig2d.add_subplot(122)
+        self.fig2d.subplots_adjust(left=0.03, bottom=0.05, right=0.99, top=0.99)
+        self._plot_2d()
+        self._plot_slice()
 
 
 # from Kasey
@@ -470,7 +503,7 @@ def read_spe(spefilename, verbose=False):
 
     ###############################################################################
     ###############################################################################
-    #           Description of the header structure used to create piUtils      ###
+    # Description of the header structure used to create piUtils      ###
     ###############################################################################
     ###############################################################################
     #
@@ -502,11 +535,11 @@ def read_spe(spefilename, verbose=False):
     # short   LogicOutput                    2  Definition of Output BNC
     # WORD    AmpHiCapLowNoise               4  Amp Switching Mode
     # WORD    xDimDet                        6  Detector x dimension of chip.
-    #  short   mode                           8  timing mode
-    #  float   exp_sec                       10  alternitive exposure, in sec.
-    #  short   VChipXdim                     14  Virtual Chip X dim
-    #  short   VChipYdim                     16  Virtual Chip Y dim
-    #  WORD    yDimDet                       18  y dimension of CCD or detector.
+    # short   mode                           8  timing mode
+    # float   exp_sec                       10  alternitive exposure, in sec.
+    # short   VChipXdim                     14  Virtual Chip X dim
+    # short   VChipYdim                     16  Virtual Chip Y dim
+    # WORD    yDimDet                       18  y dimension of CCD or detector.
     #  char    date[DATEMAX]                 20  date
     #  short   VirtualChipFlag               30  On/Off
     #  char    Spare_1[2]                    32
