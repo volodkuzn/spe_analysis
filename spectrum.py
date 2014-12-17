@@ -43,7 +43,7 @@ def get_pixel_coord(axis, pixel):
 
 
 class Spectrum2D():
-    def __init__(self, file_name, y_axis=None):
+    def __init__(self, file_name, y_axis=None, max_intensity=60000):
         if not (file_name.endswith('_.SPE')):
             raise ValueError("Could not create spectrum from not _.SPE file")
 
@@ -56,6 +56,7 @@ class Spectrum2D():
 
         self._read_spectrum(file_name)
         self.lum = self.raw_lum.copy()
+        self.lum = np.minimum(self.lum, max_intensity)
         self.fig1d = None
         self.fig2d = None
         self.ax2d = None
@@ -74,6 +75,34 @@ class Spectrum2D():
         self.x_axis = Axis("Wavelength", "A", self.wavelength[0], self.wavelength[-1])
         self.x_axis.step = (self.x_axis.stop - self.x_axis.start) / (len(self.raw_lum[0]) - 1)
         self.y_axis.step = (self.y_axis.stop - self.y_axis.start) / (len(self.raw_lum) - 1)
+
+    def remove_cosmic_rays(self, threshold=7.0):
+        """
+        This assumes that you've already loaded the file and have self.lum
+        and self.wavelen.
+
+        Remove spikes larger than
+        threshold*(standard deviation of diffs in datay).
+        (So higher threshold is less aggressive at removing points.)
+        """
+        for s in self.lum:
+            d = np.diff(s)
+            spikes = np.where(abs(d) > threshold * np.std(d))
+            spikes = np.delete(spikes, np.where(np.diff(spikes) == 1))
+            d[spikes] = 0
+            # if ( len(spikes)>0.1*len(d) ):
+            # print 'Did not remove spikes because it wanted to remove too many.'
+            # spikes=delete( spikes,pylab.find(numpy.diff(spikes)==1)+1 )
+            # if spike is one point, don't delete point after as well.
+            # if interpolate==False:
+            #     self.wavelen = delete(self.wavelen,spikes+1)
+            #     self.lum = delete(self.lum,spikes+1)
+            # else:
+            #     # don't actually 'interpolate', just set it equal to the previous point
+            #     # (actual interpolation could get messy in the case of a two-point spike, for example)
+            #     for i in spikes+1:
+            #         self.lum[i] = self.lum[i-3]
+
 
     @staticmethod
     def _construct_extent(x_axis, y_axis):
@@ -155,10 +184,12 @@ class Spectrum2D():
 
     def _plot_slice(self, spec_num=0):
         self.spec_num = spec_num
-        self.ax1d.plot(self.wavelength, self.lum[self.spec_num], color='green',
+        self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
                        label="%.3f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
+        self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+        self.ax1d.set_ylim(0, self.lum.max())
         self.ax1d.legend()
 
         def on_press(event):
@@ -173,6 +204,8 @@ class Spectrum2D():
             self.ax1d.clear()
             self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
                            label="%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
+            self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+            self.ax1d.set_ylim(0, self.lum.max())
             self.ax1d.legend()
             self.fig1d.canvas.draw()
 
