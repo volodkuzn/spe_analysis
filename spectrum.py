@@ -6,6 +6,7 @@ __version__ = '0.1'
 import sys
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 from matplotlib.widgets import RectangleSelector
 import struct
 import matplotlib.colorbar
@@ -24,6 +25,11 @@ class Axis():
 
     def get_val(self, pixel):
         return self.start + self.step * pixel
+
+    def get_pix(self, val):
+        return -np.round((val - self.start) / self.step)
+
+    # FIXME Get rid of this ugly minuses
 
     def __str__(self):
         return "%s, %s from %u to %u with step %f" % (self.name, self.units, self.start, self.stop, self.step)
@@ -63,6 +69,7 @@ class Spectrum2D():
         self.ax1d = None
         self.image2d = None
         self.colorbar = None
+        self.line = None
         self.rec_select = None
         self.spec_num = 0
 
@@ -103,14 +110,13 @@ class Spectrum2D():
             #     for i in spikes+1:
             #         self.lum[i] = self.lum[i-3]
 
-
     @staticmethod
     def _construct_extent(x_axis, y_axis):
         extent = list()
         extent.append(x_axis.start - x_axis.step / 2)
         extent.append(x_axis.stop + x_axis.step / 2)
-        extent.append(y_axis.start - y_axis.step / 2)
         extent.append(y_axis.stop + y_axis.step / 2)
+        extent.append(y_axis.start - y_axis.step / 2)
         return extent
 
     def _prepare_axis_2d(self, figsize=(10, 10)):
@@ -123,14 +129,24 @@ class Spectrum2D():
         del self.fig2d
         self.fig2d = plt.figure(num=1, figsize=figsize)
         self.ax2d = self.fig2d.add_subplot(111)
+        self.ax2d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+        self.ax2d.set_ylim([self.y_axis.start, self.y_axis.stop])
 
     def _plot_2d(self):
         extent = self._construct_extent(self.x_axis, self.y_axis)
         self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest')
         self.ax2d.set_xlabel(self.x_axis.full_name())
         self.ax2d.set_ylabel(self.y_axis.full_name())
+        self.image2d.cmap = mpl.colorbar.cm.spectral
+        self.fig2d.subplots_adjust(left=0.07, bottom=0.05, right=0.95, top=0.99)
         cax, kw = matplotlib.colorbar.make_axes(self.ax2d, location='right', fraction=0.1, shrink=1.0)
         matplotlib.colorbar.colorbar_factory(cax, self.image2d)
+        # FIXME don't plot if no slice plotted
+        x_lim = self.ax2d.get_xlim()
+        y_lim = self.ax2d.get_ylim()
+        self.line, = self.ax2d.plot([self.x_axis.start, self.x_axis.stop], [0, 0], '-r', linewidth=2)
+        self.ax2d.set_xlim(x_lim)
+        self.ax2d.set_ylim(y_lim)
         # self.colorbar = self.fig2d.colorbar(self.image2d)
 
         def onselect(eclick, erelease):
@@ -148,6 +164,7 @@ class Spectrum2D():
             # print ' endposition : (%u, %u)' % (get_pixel_coord(self.x_axis, erelease.xdata),
             # get_pixel_coord(self.y_axis, erelease.ydata))
 
+            # FIXME replace get_pixel_coord with Axis.get_pix
             x = [0, 0]
             x[0] = get_pixel_coord(self.x_axis, eclick.xdata)
             x[1] = get_pixel_coord(self.x_axis, erelease.xdata)
@@ -170,7 +187,7 @@ class Spectrum2D():
             self.fig2d.canvas.draw()
 
         self.rec_select = RectangleSelector(self.ax2d, onselect=onselect, drawtype='box', minspanx=5, minspany=5,
-                                            spancoords=u'pixels')
+                                            spancoords=u'pixels', button=1)
 
     def plot_2d(self, figsize=(10, 10)):
         self._prepare_axis_2d(figsize)
@@ -192,12 +209,36 @@ class Spectrum2D():
         self.ax1d.set_ylim(0, self.lum.max())
         self.ax1d.legend()
 
+        def update(need_line=False):
+            # self.ax1d.clear()
+            l = self.ax1d.get_lines()[0]
+            l.set_ydata(self.lum[self.spec_num])
+            l.set_label("%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
+            # self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
+            # label="%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
+            # self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+            # self.ax1d.set_ylim(0, self.lum.max())
+            self.ax1d.legend()
+            self.fig1d.canvas.draw()
+            if need_line:
+                y = self.y_axis.get_val(self.spec_num)
+                # if self.line is not None:
+                # self.line.pop(0).remove()
+                # self.line = None
+                # x_lim = self.ax2d.get_xlim()
+                # y_lim = self.ax2d.get_ylim()
+                # self.line = self.ax2d.plot([self.wavelength[0], self.wavelength[-1]], [y, y], '-r', linewidth=2)
+                # self.ax2d.set_xlim(x_lim)
+                # self.ax2d.set_ylim(y_lim)
+                self.line.set_ydata([y, y])
+                self.fig2d.canvas.draw()
+
         def on_press(event):
             # print("You pressed '%s' in '%s'" % (event.key, event.inaxes))
             if event.key == 'up':
-                self.spec_num += 1
-            elif event.key == 'down':
                 self.spec_num -= 1
+            elif event.key == 'down':
+                self.spec_num += 1
             else:
                 return
             self.spec_num %= len(self.lum)
@@ -209,7 +250,13 @@ class Spectrum2D():
             self.ax1d.legend()
             self.fig1d.canvas.draw()
 
+        def on_click(event):
+            if event.button == 3 and event.inaxes == self.ax2d:  # right click on image
+                self.spec_num = self.y_axis.get_pix(event.ydata)
+                update(need_line=True)
+
         self.fig1d.canvas.mpl_connect('key_press_event', on_press)
+        self.fig1d.canvas.mpl_connect('button_press_event', on_click)
 
     def plot_slice(self, spec_num=0, figsize=(10, 10)):
         self._prepare_axis_slice(figsize)
@@ -222,7 +269,7 @@ class Spectrum2D():
         self.ax1d = self.fig2d.add_subplot(122)
         self.fig2d.subplots_adjust(left=0.03, bottom=0.05, right=0.99, top=0.99)
         self._plot_2d()
-        self._plot_slice()
+        self._plot_slice(self.spec_num)
 
 
 # from Kasey
