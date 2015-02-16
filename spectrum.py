@@ -1,7 +1,7 @@
 from __future__ import division
 
 __author__ = 'volod_kuzn'
-__version__ = '0.1'
+__version__ = '0.1.1'
 
 import sys
 import numpy as np
@@ -27,9 +27,7 @@ class Axis():
         return self.start + self.step * pixel
 
     def get_pix(self, val):
-        return -np.round((val - self.start) / self.step)
-
-    # FIXME Get rid of this ugly minuses
+        return np.round((val - self.start) / self.step)
 
     def __str__(self):
         return "%s, %s from %u to %u with step %f" % (self.name, self.units, self.start, self.stop, self.step)
@@ -37,15 +35,6 @@ class Axis():
 
 def show():
     plt.show()
-
-
-def get_pixel_coord(axis, pixel):
-    """
-    :param axis: This is actual axis parameter
-    :param pixel: This is pixel coordinate in data units
-    :return: Pixel coordinate in pixel units
-    """
-    return int((pixel - axis.start) / axis.step)
 
 
 class Spectrum2D():
@@ -56,7 +45,7 @@ class Spectrum2D():
         self.name = file_name
         self.x_axis = None
         if y_axis is None:
-            self.y_axis = Axis("", "", 0, 0)
+            self.y_axis = Axis("", "a. u.", 0, 1)
         else:
             self.y_axis = y_axis
 
@@ -102,8 +91,8 @@ class Spectrum2D():
             # spikes=delete( spikes,pylab.find(numpy.diff(spikes)==1)+1 )
             # if spike is one point, don't delete point after as well.
             # if interpolate==False:
-            #     self.wavelen = delete(self.wavelen,spikes+1)
-            #     self.lum = delete(self.lum,spikes+1)
+            # self.wavelen = delete(self.wavelen,spikes+1)
+            # self.lum = delete(self.lum,spikes+1)
             # else:
             #     # don't actually 'interpolate', just set it equal to the previous point
             #     # (actual interpolation could get messy in the case of a two-point spike, for example)
@@ -125,16 +114,17 @@ class Spectrum2D():
         :param figsize:
         This methon prepares 2 figures and 2 axes for plotting
         """
+        # FIXME get rid of this "del"
         del self.ax2d
         del self.fig2d
         self.fig2d = plt.figure(num=1, figsize=figsize)
         self.ax2d = self.fig2d.add_subplot(111)
-        self.ax2d.set_xlim([self.wavelength[0], self.wavelength[-1]])
-        self.ax2d.set_ylim([self.y_axis.start, self.y_axis.stop])
 
     def _plot_2d(self):
         extent = self._construct_extent(self.x_axis, self.y_axis)
-        self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest')
+        self.ax2d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+        self.ax2d.set_ylim([self.y_axis.start, self.y_axis.stop])
+        self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest', origin='upper')
         self.ax2d.set_xlabel(self.x_axis.full_name())
         self.ax2d.set_ylabel(self.y_axis.full_name())
         self.image2d.cmap = mpl.colorbar.cm.spectral
@@ -164,17 +154,16 @@ class Spectrum2D():
             # print ' endposition : (%u, %u)' % (get_pixel_coord(self.x_axis, erelease.xdata),
             # get_pixel_coord(self.y_axis, erelease.ydata))
 
-            # FIXME replace get_pixel_coord with Axis.get_pix
             x = [0, 0]
-            x[0] = get_pixel_coord(self.x_axis, eclick.xdata)
-            x[1] = get_pixel_coord(self.x_axis, erelease.xdata)
+            x[0] = self.x_axis.get_pix(eclick.xdata)
+            x[1] = self.x_axis.get_pix(erelease.xdata)
             x.sort()
             y = [0, 0]
-            y[0] = get_pixel_coord(self.y_axis, eclick.ydata)
-            y[1] = get_pixel_coord(self.y_axis, erelease.ydata)
+            y[0] = self.y_axis.get_pix(eclick.ydata)
+            y[1] = self.y_axis.get_pix(erelease.ydata)
             y.sort()
 
-            tmp = self.lum[-y[1]: -y[0], x[0]: x[1]]
+            tmp = self.lum[y[0]: y[1], x[0]: x[1]]
             # print("Tmp slice: %u: %u, %u: %u" % (x[0], x[1], y[0], y[1]))
             # print("Min: %u, max: %u" % (tmp.min(), tmp.max()))
             # print("All min: %u, max: %u" % (self.lum.min(), self.lum.max()))
@@ -187,20 +176,23 @@ class Spectrum2D():
             self.fig2d.canvas.draw()
 
         self.rec_select = RectangleSelector(self.ax2d, onselect=onselect, drawtype='box', minspanx=5, minspany=5,
-                                            spancoords=u'pixels', button=1)
+                                            spancoords=u'pixels', button=1,
+                                            rectprops={'facecolor': 'red', 'edgecolor': 'white', 'alpha': 0.3,
+                                                       'fill': True})
 
     def plot_2d(self, figsize=(10, 10)):
         self._prepare_axis_2d(figsize)
         self._plot_2d()
 
     def _prepare_axis_slice(self, figsize=(10, 10)):
+        # FIXME get rid of this "del"
         del self.ax1d
         del self.fig1d
         self.fig1d = plt.figure(num=2, figsize=figsize)
         self.ax1d = self.fig1d.add_subplot(111)
 
     def _plot_slice(self, spec_num=0):
-        self.spec_num = spec_num
+        # TODO Implement negative indexes
         self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
                        label="%.3f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
@@ -210,26 +202,13 @@ class Spectrum2D():
         self.ax1d.legend()
 
         def update(need_line=False):
-            # self.ax1d.clear()
             l = self.ax1d.get_lines()[0]
             l.set_ydata(self.lum[self.spec_num])
             l.set_label("%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
-            # self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
-            # label="%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
-            # self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
-            # self.ax1d.set_ylim(0, self.lum.max())
             self.ax1d.legend()
             self.fig1d.canvas.draw()
             if need_line:
                 y = self.y_axis.get_val(self.spec_num)
-                # if self.line is not None:
-                # self.line.pop(0).remove()
-                # self.line = None
-                # x_lim = self.ax2d.get_xlim()
-                # y_lim = self.ax2d.get_ylim()
-                # self.line = self.ax2d.plot([self.wavelength[0], self.wavelength[-1]], [y, y], '-r', linewidth=2)
-                # self.ax2d.set_xlim(x_lim)
-                # self.ax2d.set_ylim(y_lim)
                 self.line.set_ydata([y, y])
                 self.fig2d.canvas.draw()
 
@@ -242,13 +221,7 @@ class Spectrum2D():
             else:
                 return
             self.spec_num %= len(self.lum)
-            self.ax1d.clear()
-            self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
-                           label="%.3f %s" % (self.y_axis.get_val(self.spec_num), self.y_axis.units))
-            self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
-            self.ax1d.set_ylim(0, self.lum.max())
-            self.ax1d.legend()
-            self.fig1d.canvas.draw()
+            update(self.ax2d is not None)
 
         def on_click(event):
             if event.button == 3 and event.inaxes == self.ax2d:  # right click on image
@@ -270,6 +243,13 @@ class Spectrum2D():
         self.fig2d.subplots_adjust(left=0.03, bottom=0.05, right=0.99, top=0.99)
         self._plot_2d()
         self._plot_slice(self.spec_num)
+
+    def del_plot(self):
+        # FIXME Implement correct removal of figures and axises
+        self.ax1d = None
+        self.ax2d = None
+        self.fig1d = None
+        self.fig2d = None
 
 
 # from Kasey
@@ -546,7 +526,7 @@ def read_spe(spefilename, verbose=False):
                'ACCUMULATIONS': accumulations,
                'FLATFIELD': flat_field_applied,
                'BACKGROUND': background_applied
-               }
+    }
 
     # Now read in the image data
     # Loop over each image frame in the image
@@ -620,8 +600,8 @@ def read_spe(spefilename, verbose=False):
     # short   VChipXdim                     14  Virtual Chip X dim
     # short   VChipYdim                     16  Virtual Chip Y dim
     # WORD    yDimDet                       18  y dimension of CCD or detector.
-    #  char    date[DATEMAX]                 20  date
-    #  short   VirtualChipFlag               30  On/Off
+    # char    date[DATEMAX]                 20  date
+    # short   VirtualChipFlag               30  On/Off
     #  char    Spare_1[2]                    32
     #  short   noscan                        34  Old number of scans - should always be -1
     #  float   DetTemperature                36  Detector Temperature Set
