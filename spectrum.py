@@ -12,6 +12,11 @@ import struct
 import matplotlib.colorbar
 
 
+def en_wl(wl):
+    return ((2 * 3.14159 * 2.9979 * (10 ** 10) * 1.0546 * (10 ** -27))
+            / (wl * (10 ** -8) * 1.6022 * (10 ** -12)))
+
+
 class Axis():
     def __init__(self, name, units, start, stop):
         self.name = name
@@ -68,6 +73,7 @@ class Spectrum2D():
         p = self._raw_data['XCALIB']["polynom_coeff"]
         self.calib_polynom = np.array([p[2], p[1], p[0]])
         self.wavelength = np.polyval(self.calib_polynom, xrange(1, 1 + len(self.raw_lum[0])))
+        self.energy = en_wl(self.wavelength)
         self.x_axis = Axis("Wavelength", "A", self.wavelength[0], self.wavelength[-1])
         self.x_axis.step = (self.x_axis.stop - self.x_axis.start) / (len(self.raw_lum[0]) - 1)
         self.y_axis.step = (self.y_axis.stop - self.y_axis.start) / (len(self.raw_lum) - 1)
