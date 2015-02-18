@@ -4,14 +4,12 @@ __author__ = 'volod_kuzn'
 __version__ = 0.1
 
 
-def _gauss(x, *args):
+def gauss(x, *args):
     """
     Defines multiple Gaussians with characteristics defined by 'params':
     params = ymax, stddev, x0...
     For multiple Gaussians, string together parameters into one long list (so we can fit using leastsq).
-    Important: for multiple Gaussians, there is only one yoffset, and this will be the first
-    element of the list; each individual Gaussian then has three parameters.
-    For a single Gaussian, params can be a dict containing the keys yoffset, ymax, x0, and halfwidth.
+    For a single Gaussian, params can be a dict containing the keys ymax, x0, and halfwidth.
     """
     # args = np.abs(args)
     freeparams = 3  # number free parameters per lorentzian, not counting yoffset
