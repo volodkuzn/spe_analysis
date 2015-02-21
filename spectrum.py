@@ -13,6 +13,7 @@ import matplotlib.colorbar
 
 
 def en_wl(wl):
+    # 2 * pi * c * hbar / (lambda * 1/eV)
     return ((2 * 3.14159 * 2.9979 * (10 ** 10) * 1.0546 * (10 ** -27))
             / (wl * (10 ** -8) * 1.6022 * (10 ** -12)))
 
@@ -33,6 +34,15 @@ class Axis():
 
     def get_pix(self, val):
         return np.round((val - self.start) / self.step)
+
+    def set_step_size(self, n):
+        """
+        Number of steps given
+        :param n:
+        :return step size:
+        """
+        self.step = (self.stop - self.start) / (n - 1)
+        return self.step
 
     def __str__(self):
         return "%s, %s from %u to %u with step %f" % (self.name, self.units, self.start, self.stop, self.step)
@@ -66,6 +76,8 @@ class Spectrum2D():
         self.line = None
         self.rec_select = None
         self.spec_num = 0
+        self.x_units = 'wavelength'
+        self.x = None
 
     def _read_spectrum(self, file_name):
         self._raw_data = read_spe(file_name)
@@ -73,10 +85,14 @@ class Spectrum2D():
         p = self._raw_data['XCALIB']["polynom_coeff"]
         self.calib_polynom = np.array([p[2], p[1], p[0]])
         self.wavelength = np.polyval(self.calib_polynom, xrange(1, 1 + len(self.raw_lum[0])))
+        self.w_axis = Axis("Wavelength", "A", self.wavelength[0], self.wavelength[-1])
+        self.w_axis.set_step_size(len(self.raw_lum[0]))
         self.energy = en_wl(self.wavelength)
-        self.x_axis = Axis("Wavelength", "A", self.wavelength[0], self.wavelength[-1])
-        self.x_axis.step = (self.x_axis.stop - self.x_axis.start) / (len(self.raw_lum[0]) - 1)
-        self.y_axis.step = (self.y_axis.stop - self.y_axis.start) / (len(self.raw_lum) - 1)
+        self.e_axis = Axis("Energy", "eV", self.energy[-1], self.energy[0])
+        self.e_axis.set_step_size(len(self.raw_lum[0]))
+        self.y_axis.set_step_size(len(self.raw_lum))
+        self.x_axis = self.w_axis
+        self.x = self.wavelength
 
     def remove_cosmic_rays(self, threshold=7.0):
         """
@@ -105,6 +121,22 @@ class Spectrum2D():
             #     for i in spikes+1:
             #         self.lum[i] = self.lum[i-3]
 
+    def set_x_units(self, units):
+        """
+        This method is used to set x_axis untis in energy (eV) or in wavelength (A)
+        :param units could be eather of 'energy' or wavelength:
+        :return:
+        """
+        if units == 'wavelength':
+            self.x_axis = self.w_axis
+            self.x = self.wavelength
+        elif units == 'energy':
+            self.x_axis = self.e_axis
+            self.x = self.energy
+        else:
+            raise ValueError("Bad argument. Must be 'energy' or 'wavelength'")
+        return
+
     @staticmethod
     def _construct_extent(x_axis, y_axis):
         extent = list()
@@ -118,7 +150,7 @@ class Spectrum2D():
         """
 
         :param figsize:
-        This methon prepares 2 figures and 2 axes for plotting
+        This method prepares 2 figures and 2 axes for plotting
         """
         # FIXME get rid of this "del"
         del self.ax2d
@@ -128,7 +160,7 @@ class Spectrum2D():
 
     def _plot_2d(self):
         extent = self._construct_extent(self.x_axis, self.y_axis)
-        self.ax2d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+        self.ax2d.set_xlim([self.x_axis.start, self.x_axis.stop])
         self.ax2d.set_ylim([self.y_axis.start, self.y_axis.stop])
         self.image2d = self.ax2d.imshow(self.lum, aspect='auto', extent=extent, interpolation='nearest', origin='upper')
         self.ax2d.set_xlabel(self.x_axis.full_name())
@@ -199,11 +231,11 @@ class Spectrum2D():
 
     def _plot_slice(self, spec_num=0):
         # TODO Implement negative indexes
-        self.ax1d.plot(self.wavelength, self.lum[self.spec_num],
+        self.ax1d.plot(self.x, self.lum[self.spec_num],
                        label="%.3f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
-        self.ax1d.set_xlim([self.wavelength[0], self.wavelength[-1]])
+        self.ax1d.set_xlim([self.x_axis.start, self.x_axis.stop])
         self.ax1d.set_ylim(0, self.lum.max())
         self.ax1d.legend()
 
