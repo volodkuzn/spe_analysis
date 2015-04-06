@@ -54,9 +54,6 @@ def show():
 
 class Spectrum2D():
     def __init__(self, file_name, y_axis=None, max_intensity=60000):
-        if not (file_name.endswith('_.SPE')):
-            raise ValueError("Could not create spectrum from not _.SPE file")
-
         self.name = file_name
         self.x_axis = None
         if y_axis is None:
@@ -81,7 +78,15 @@ class Spectrum2D():
 
     def _read_spectrum(self, file_name):
         self._raw_data = read_spe(file_name)
-        self.raw_lum = self._raw_data['data'][0]
+        if file_name.endswith('_.SPE'):
+            self.raw_lum = self._raw_data['data'][0]
+        elif file_name.endswith('.SPE'):
+            raw_lum = []
+            for s in self._raw_data['data']:
+                raw_lum.append(s[0])
+            self.raw_lum = np.array(raw_lum)
+        else:
+            raise ValueError("Could not create spectrum from not _.SPE file")
         p = self._raw_data['XCALIB']["polynom_coeff"]
         self.calib_polynom = np.array([p[2], p[1], p[0]])
         self.wavelength = np.polyval(self.calib_polynom, xrange(1, 1 + len(self.raw_lum[0])))
@@ -231,7 +236,7 @@ class Spectrum2D():
 
     def _plot_slice(self, spec_num=0):
         # TODO Implement negative indexes
-        self.ax1d.plot(self.x, self.lum[self.spec_num],
+        self.ax1d.plot(self.x, self.lum[spec_num],
                        label="%.3f %s" % (self.y_axis.get_val(spec_num), self.y_axis.units))
         self.ax1d.set_xlabel(self.x_axis.full_name())
         self.ax1d.set_ylabel("Intensity, a. u.")
